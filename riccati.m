@@ -21,11 +21,23 @@ sys = ss(A, B, C, D)
 Ts = 0.01;
 sysd = c2d(sys,Ts)
 
-sys_setmpc = setmpcsignals(sysd);
-mpcobj = mpc(sys_setmpc, Ts, 10);
-Tstop = 1;
+% sys_setmpc = setmpcsignals(sysd);
+% mpcobj = mpc(sys_setmpc, Ts, 10);
+% Tstop = 1;
+% 
+% num_sim_steps = round(Tstop/Ts);
+% r = [ones(num_sim_steps,1), ones(num_sim_steps,1)];
+% 
+% sim(mpcobj,num_sim_steps,r)
 
-num_sim_steps = round(Tstop/Ts);
-r = [ones(num_sim_steps,1), ones(num_sim_steps,1)];
+% m = 16; n = 8;
+% A = randn(m,n);
+% b = randn(m,1);
+% 
+cvx_begin
+    variable x[t] (n), t=1..10
+    variable u[t] (m), t=0..9
+   
+cvx_end
 
-sim(mpcobj,num_sim_steps,r)
+
