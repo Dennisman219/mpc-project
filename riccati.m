@@ -15,3 +15,17 @@ Q = eye(4)
 R = 0.1*eye(2)
 
 [X, K, L, info] = idare(A,B,Q,R,[],[])
+
+sys = ss(A, B, C, D)
+
+Ts = 0.01;
+sysd = c2d(sys,Ts)
+
+sys_setmpc = setmpcsignals(sysd);
+mpcobj = mpc(sys_setmpc, Ts, 10);
+Tstop = 1;
+
+num_sim_steps = round(Tstop/Ts);
+r = [ones(num_sim_steps,1), ones(num_sim_steps,1)];
+
+sim(mpcobj,num_sim_steps,r)
