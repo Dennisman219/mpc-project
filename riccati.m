@@ -26,18 +26,20 @@ LTI.C = sys_dis.C
 LTI.D = sys_dis.D
 
 x0 = [0;0;0;0];
-x_ref= [0;0;0;-10];
+x_ref= [0;0;0;-89];
 
 dim.nx = 4
 dim.ny = 4
 dim.nu = 2
-dim.N = 10
+dim.N = 5
 
-Q = eye(4)
-R = eye(2)
+Q = 13*eye(4)
+R = 0.7*eye(2)
 
 
 % [X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[])
+
+
 
 
 [P, S]=predmodgen(LTI, dim)
@@ -50,8 +52,8 @@ u = sdpvar(2*dim.N, 1);
 
 u_min = -25*ones(2*dim.N, 1);  % Minimum input value
 u_max = 25*ones(2*dim.N, 1);   % Maximum input value
-Constraint = [u_min <= u; u <= u_max];  % Add input constraints 
 
+Constraint = [u_min <= u; u <= u_max];  % Add input constraints 
 
 Objective = 0.5*u'*H*u+h'*u         %define cost function
 
@@ -65,20 +67,39 @@ x1_values = zeros(dim.nx, time);
 x1_values(:, 1) = C*x1;
 c1_values = zeros(dim.nu, time);
 
-for i = 2:time
+
+State_constraints_plus = kron(ones(dim.N, 1),[300; 90; 20; 90])
+State_constraints_min = kron(-1*ones(dim.N, 1),[300; 90; 20; 90])
+
+for i = 2:time    
+    min_lim_ = State_constraints_min - (P*(x1)); 
+    max_lim_ = State_constraints_plus - (P*(x1));
+    
+    Constraint = [min_lim_ <= S*u; S*u <=max_lim_; u_min <= u; u <= u_max];  % Add input constraints 
+
+
     [H1,h1,const1]=costgen(P,S,Q,R,dim,(x1-x_ref));
-       
+
     Objective = 0.5*u'*H1*u+h1'*u;
 
     optimize(Constraint,Objective);      
     uopt=value(u);
-    
+
     c1_values(:, i) = uopt(1:dim.nu);    
-    
+
     x1=LTI.A*x1+LTI.B*uopt(1:dim.nu);
 
     x1_values(:, i) = C*x1;
 end    
+
+fprintf("size P:")
+size(P) 
+fprintf("size S:")
+size(S)
+fprintf("size H1:")
+size(H1)
+fprintf("size h1:")
+size(h1)
 
 plot(x1_values');
 xlabel('Iteration');
@@ -93,27 +114,4 @@ ylabel('Value of x1');
 title('Values of x1 over iterations');
 legend('u', 'u1'); % Add legend entries based on the dimensions of x1
 
-% figure;
-% plot(uopt_1');
-
-
-
-% cvx_begin 
-%     variable uopt1(dim.nu*dim.N)
-%     minimize(0.5*uopt1'*H1*uopt1+h1'*uopt1)
-% cvx_end
-
-% sys_setmpc = setmpcsignals(sysd);
-% mpcobj = mpc(sys_setmpc, Ts, 10);
-% Tstop = 1;
-% 
-% num_sim_steps = round(Tstop/Ts);
-% r = [ones(num_sim_steps,1), ones(num_sim_steps,1)];
-% 
-% sim(mpcobj,num_sim_steps,r)
-
-% m = 16; n = 8;
-% A = randn(m,n);
-% b = randn(m,1);
-% 
 
