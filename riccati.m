@@ -36,13 +36,9 @@ dim.N = 5
 Q = 13*eye(4)
 R = 0.7*eye(2)
 
+[X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[])
 
-% [X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[])
-
-
-
-
-[P, S]=predmodgen(LTI, dim)
+[P, S] = predmodgen(LTI, dim)
 [H,h,const] = costgen(P, S, Q, R, dim, (x0))
 
 x1 = x0;
@@ -52,25 +48,33 @@ u = sdpvar(2*dim.N, 1);
 
 u_min = -25*ones(2*dim.N, 1);  % Minimum input value
 u_max = 25*ones(2*dim.N, 1);   % Maximum input value
+ulb = [-25; -25];
+uub = [25; 25];
 
 Constraint = [u_min <= u; u <= u_max];  % Add input constraints 
 
-Objective = 0.5*u'*H*u+h'*u         %define cost function
+Objective = 0.5*u'*H*u+h'*u;         %define cost function
 
-optimize(Constraint,Objective)      %solve the problem
-uopt_1=value(u)                       %assign the solution to uopt1
+optimize(Constraint,Objective);      %solve the problem
+uopt_1=value(u);                       %assign the solution to uopt1
 
 x1=LTI.A*x0+LTI.B*uopt_1(1:dim.nu);
 x1_values = zeros(dim.nx, time);
 
-
 x1_values(:, 1) = C*x1;
 c1_values = zeros(dim.nu, time);
 
+State_constraints_plus = kron(ones(dim.N, 1),[300; 90; 20; 90]);
+State_constraints_min = kron(-1*ones(dim.N, 1),[300; 90; 20; 90]);
+xlb = [-300; -90; -90; -90];
+xub = [300; 90; 90; 90];
 
-State_constraints_plus = kron(ones(dim.N, 1),[300; 90; 20; 90])
-State_constraints_min = kron(-1*ones(dim.N, 1),[300; 90; 20; 90])
+%% Terminal set (?)
 
+[Xn, V, Z] = findXn(LTI.A, LTI.B, K, dim.N, xlb, xub, ulb, uub, 'lqr');
+
+%%
+%{
 for i = 2:time    
     min_lim_ = State_constraints_min - (P*(x1)); 
     max_lim_ = State_constraints_plus - (P*(x1));
@@ -115,3 +119,4 @@ title('Values of x1 over iterations');
 legend('u', 'u1'); % Add legend entries based on the dimensions of x1
 
 
+%}
