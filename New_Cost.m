@@ -39,13 +39,17 @@ x_ref= [0;0;0;-2];
 dim.nx = 4;
 dim.ny = 4;
 dim.nu = 2;
-dim.N =10;
+dim.N =3;
 time = 15
 
 
 % weighting matrices
 % Q = eye(4);
-Q =   [1 0 0 0; 0 1 0 0; 0 0 1 0; 0 0 0 1000]
+% R = eye(2);
+Q =   [1 0 0 0; 
+    0 1 0 0; 
+    0 0 1 0; 
+    0 0 0 1000]
 R = 0.1 * eye(2);
 
 
@@ -82,9 +86,10 @@ c1_values = zeros(dim.nu, time);
 
 
 % state constraints
-State_constraints_plus = kron(ones(dim.N + 1, 1),[100; 100; 50; 10])
+State_constraints_plus = kron(ones(dim.N + 1, 1),[100; 100; 50; 10]);
 State_constraints_min = -1*State_constraints_plus;
 
+% Finding the terminal set
 system = LTISystem('A', LTI.A, 'B', LTI.B);
 system.x.min = [-100; -100; -50; -10];
 system.x.max = [100; 100; 50; 10];
@@ -97,6 +102,13 @@ system.u.penalty = QuadFunction( R );
 Pen = system.LQRPenalty;
 Tset = system.LQRSet;
 
+% Expanding the matrices to form inequality constraints that the solver can
+% take
+A_t = Tset.A;
+B_t=Tset.b;
+A_t_bar = kron(eye(dim.N+1), A_t)
+B_t_bar = kron(ones(dim.N+1, 1), B_t)
+
 % solver settings
 ops = sdpsettings('verbose',0, 'debug',0, 'showprogress', 0)
 
@@ -106,7 +118,10 @@ c1_values = zeros(dim.nu, time);
 for i = 2:time  
     min_lim_ = State_constraints_min - (P*(x1)); 
     max_lim_ = State_constraints_plus - (P*(x1));
-    Constraint = [min_lim_ <= S*u; S*u <=max_lim_; u_min <= u; u <= u_max];  % Add input constraints 
+
+    % Add input constraints, state contraints and constraints produced by
+    % the LQR set
+    Constraint = [min_lim_ <= S*u; S*u <=max_lim_; u_min <= u; u <= u_max;  A_t_bar*S*u <=(B_t_bar -A_t_bar*P*x1) ]; 
 
     %calculate new cost
     x_bar = P*(x1-x_ref) + S * u
@@ -132,7 +147,7 @@ figure;
 stairs(c1_values');
 xlabel('time step');
 ylabel('state values');
-title('Inputs N=30');
+title('Inputs N=10');
 legend('u0', 'u1'); % Add legend entries based on the dimensions of x1
 
 % [K2,S2,e] = dlqr(LTI.A,LTI.B,Q,R) 
