@@ -32,7 +32,7 @@ LTI.D = sys_dis.D;
 
 % reference
 x0 = [0;0;0;0];
-x_ref= [0;0;0;3];
+x_ref= [0;0;0;-2];
 
 
 % dimensions
@@ -40,7 +40,7 @@ dim.nx = 4;
 dim.ny = 4;
 dim.nu = 2;
 dim.N =10;
-time = 30
+time = 15
 
 
 % weighting matrices
@@ -76,17 +76,32 @@ Objective = x_bar' * Q_bar * x_bar + u' * R_tilde * u
 optimize(Constraint,Objective)     
 uopt_1=value(u)     
 x1=LTI.A*x0+LTI.B*uopt_1(1:dim.nu);
-x1_values = zeros(dim.nx, time);
+
 x1_values(:, 1) = C*x1;
 c1_values = zeros(dim.nu, time);
 
 
 % state constraints
-State_constraints_plus = kron(ones(dim.N + 1, 1),[300; 90; 30; 90])
+State_constraints_plus = kron(ones(dim.N + 1, 1),[100; 100; 50; 10])
 State_constraints_min = -1*State_constraints_plus;
+
+system = LTISystem('A', LTI.A, 'B', LTI.B);
+system.x.min = [-100; -100; -50; -10];
+system.x.max = [100; 100; 50; 10];
+system.u.min = [-25, -25];
+system.u.max = [25, 25];
+
+system.x.penalty = QuadFunction( Q );
+system.u.penalty = QuadFunction( R );
+
+Pen = system.LQRPenalty;
+Tset = system.LQRSet;
 
 % solver settings
 ops = sdpsettings('verbose',0, 'debug',0, 'showprogress', 0)
+
+x1_values = zeros(dim.nx, time);
+c1_values = zeros(dim.nu, time);
 
 for i = 2:time  
     min_lim_ = State_constraints_min - (P*(x1)); 
@@ -108,14 +123,22 @@ for i = 2:time
 end
 
 plot(x1_values');
-xlabel('Iteration');
-ylabel('Value of x1');
-title('Values of x1 over iterations');
-legend('x1_1', 'x1_2', 'x1_3', 'x1_4'); % Add legend entries based on the dimensions of x1
+xlabel('time step');
+ylabel('state values');
+title('State evolution N=10');
+legend('u', 'w', 'q', 'θ'); % Add legend entries based on the dimensions of x1
 
 figure;
 stairs(c1_values');
-xlabel('Iteration');
-ylabel('Value of x1');
-title('Values of x1 over iterations');
-legend('u', 'u1'); % Add legend entries based on the dimensions of x1
+xlabel('time step');
+ylabel('state values');
+title('Inputs N=30');
+legend('u0', 'u1'); % Add legend entries based on the dimensions of x1
+
+% [K2,S2,e] = dlqr(LTI.A,LTI.B,Q,R) 
+% figure()
+% sys2 = ss((LTI.A - LTI.B*K2), zeros(4, 2),  eye(4), LTI.D )
+% stepplot(sys2)
+
+
+
