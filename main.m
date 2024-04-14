@@ -1,10 +1,7 @@
-
-s = settings;s.matlab.desktop.DisplayScaleFactor
-s.matlab.desktop.DisplayScaleFactor.PersonalValue = 1
-
 clear all 
 close all
 addpath('functions/')
+
 % Linearizing for longitudinal h = 3,000 ft and M = 0.60
 % continuous linearised system
 A = [-0.0151 -60.5651 0 -32.174;
@@ -17,94 +14,120 @@ B = [-2.516 -13.136;
      -17.251 -1.5766;
       0        0];
 
-C = eye(4)
+C = eye(4);
 
-D = [0 0; 0 0; 0 0; 0 0]
+D = [0 0; 0 0; 0 0; 0 0];
 
 Ts = 0.1;
-sys = ss(A, B, C, D)
-sys_dis = c2d(sys,Ts)
+sys = ss(A, B, C, D);
+sys_dis = c2d(sys,Ts);
+
 
 % discrete systems
-LTI.A = sys_dis.A
-LTI.B = sys_dis.B
-LTI.C = sys_dis.C
-LTI.D = sys_dis.D
+LTI.A = sys_dis.A;
+LTI.B = sys_dis.B;
+LTI.C = sys_dis.C;
+LTI.D = sys_dis.D;
 
-x0 = [1;1;1;1];
-x_ref= [0;0;0;5];
 
-dim.nx = 4
-dim.ny = 4
-dim.nu = 2
-dim.N = 10
+% reference
+x0 = [0;0;0;0];
+x_ref= [0;0;0;-2];
 
-Q = 700*eye(4)
-R = eye(2)
 
-[X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[])
+% dimensions
+dim.nx = 4;
+dim.ny = 4;
+dim.nu = 2;
+dim.N =10;
+time = 15
 
-% get eigenvalues and eigenvectors
-e_p = eig(X)
-[V, D]  = eig(X)
 
-% Build hyper rectangle 
+% weighting matrices
+% Q = eye(4);
+% R = eye(2);
+Q =   [1 0 0 0; 
+    0 1 0 0; 
+    0 0 1 0; 
+    0 0 0 1000]
+R = 0.1 * eye(2);
 
-% Solve quadratic program
+
+% ricatti solutions
+[X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[]);
+
+
+% get the P and the S
+[P, S]=prediction_matrices(LTI, dim);
+
+
+% calculate Q_bar
+Q_tilde = kron(eye(dim.N), Q);
+R_tilde = kron(eye(dim.N), R);
+Q_bar = [ Q_tilde, zeros(dim.N*4, 4); zeros(4, dim.N*4), X];
+
+
+% input contraints
+u = sdpvar(2*dim.N, 1);  
+u_min = -25*ones(2*dim.N, 1);  
+u_max = 25*ones(2*dim.N, 1);   
+Constraint = [u_min <= u; u <= u_max]; 
+
+
+% do one solver pass
+x_bar = P*x0 + S * u
+Objective = x_bar' * Q_bar * x_bar + u' * R_tilde * u  
+optimize(Constraint,Objective)     
+uopt_1=value(u)     
+x1=LTI.A*x0+LTI.B*uopt_1(1:dim.nu);
+
+x1_values(:, 1) = C*x1;
+c1_values = zeros(dim.nu, time);
+
+
+% state constraints
+State_constraints_plus = kron(ones(dim.N + 1, 1),[100; 100; 50; 10]);
+State_constraints_min = -1*State_constraints_plus;
+
+% Finding the terminal set
 system = LTISystem('A', LTI.A, 'B', LTI.B);
-system.x.min = [-300; -90; -90; -90];
-system.x.max = [300; 90; 90; 90];
+system.x.min = [-100; -100; -50; -10];
+system.x.max = [100; 100; 50; 10];
 system.u.min = [-25, -25];
 system.u.max = [25, 25];
 
 system.x.penalty = QuadFunction( Q );
 system.u.penalty = QuadFunction( R );
 
-P = system.LQRPenalty;
-Tset = system.LQRSet
-A_term = kron(ones(1, dim.N),Tset.A)
-b_term = kron(ones(1, 1), Tset.b)
+Pen = system.LQRPenalty;
+Tset = system.LQRSet;
 
-[P, S]=predmodgen(LTI, dim)
-[H,h,const] = costgen(P, S, Q, R, dim, (x0))
+% Expanding the matrices to form inequality constraints that the solver can
+% take
+A_t = Tset.A;
+B_t=Tset.b;
+A_t_bar = kron(eye(dim.N+1), A_t)
+B_t_bar = kron(ones(dim.N+1, 1), B_t)
 
-x1 = x0;
-time = 100
+% solver settings
+ops = sdpsettings('verbose',0, 'debug',0, 'showprogress', 0)
 
-u = sdpvar(2*dim.N, 1);  
-
-u_min = -25*ones(2*dim.N, 1);  % Minimum input value
-u_max = 25*ones(2*dim.N, 1);   % Maximum input value
-
-Constraint = [u_min <= u; u <= u_max];  % Add input constraints 
-
-Objective = 0.5*u'*H*u+h'*u         %define cost function
-
-optimize(Constraint,Objective)      %solve the problem
-uopt_1=value(u)                       %assign the solution to uopt1
-
-x1=LTI.A*x0+LTI.B*uopt_1(1:dim.nu);
 x1_values = zeros(dim.nx, time);
-
-
-x1_values(:, 1) = C*x1;
 c1_values = zeros(dim.nu, time);
 
-
-State_constraints_plus = kron(ones(dim.N, 1),[300; 90; 30; 90])
-State_constraints_min = -1*State_constraints_plus;
-for i = 2:time    
+for i = 2:time  
     min_lim_ = State_constraints_min - (P*(x1)); 
     max_lim_ = State_constraints_plus - (P*(x1));
 
-    %Constraint = [min_lim_ <= S*u; S*u <=max_lim_; u_min <= u; u <= u_max; A_term*S*u <= (b_term - A_term*P*x1)];  % Add input constraints 
-    Constraint = [min_lim_ <= S*u; S*u <=max_lim_; u_min <= u; u <= u_max];  % Add input constraints 
+    % Add input constraints, state contraints and constraints produced by
+    % the LQR set
+    Constraint = [min_lim_ <= S*u; S*u <=max_lim_; u_min <= u; u <= u_max;  A_t_bar*S*u <=(B_t_bar -A_t_bar*P*x1) ]; 
 
-    [H1,h1,const1]=costgen(P,S,Q,R,dim,(x1-x_ref));
+    %calculate new cost
+    x_bar = P*(x1-x_ref) + S * u
+    Objective = 0.5*x_bar' * Q_bar * x_bar + 0.5*u' * R_tilde * u  
 
-    Objective = 0.5*u'*H1*u+h1'*u;
-
-    optimize(Constraint,Objective);      
+    optimize(Constraint,Objective, ops);      
     uopt=value(u);
 
     c1_values(:, i) = uopt(1:dim.nu);    
@@ -112,28 +135,25 @@ for i = 2:time
     x1=LTI.A*x1+LTI.B*uopt(1:dim.nu);
 
     x1_values(:, i) = C*x1;
-end    
-
-fprintf("size P:")
-size(P) 
-fprintf("size S:")
-size(S)
-fprintf("size H1:")
-size(H1)
-fprintf("size h1:")
-size(h1)
+end
 
 plot(x1_values');
-xlabel('Iteration');
-ylabel('Value of x1');
-title('Values of x1 over iterations');
-legend('x1_1', 'x1_2', 'x1_3', 'x1_4'); % Add legend entries based on the dimensions of x1
+xlabel('time step');
+ylabel('state values');
+title('State evolution N=10');
+legend('u', 'w', 'q', 'θ'); % Add legend entries based on the dimensions of x1
 
 figure;
 stairs(c1_values');
-xlabel('Iteration');
-ylabel('Value of x1');
-title('Values of x1 over iterations');
-legend('u', 'u1'); % Add legend entries based on the dimensions of x1
+xlabel('time step');
+ylabel('state values');
+title('Inputs N=10');
+legend('u0', 'u1'); % Add legend entries based on the dimensions of x1
+
+% [K2,S2,e] = dlqr(LTI.A,LTI.B,Q,R) 
+% figure()
+% sys2 = ss((LTI.A - LTI.B*K2), zeros(4, 2),  eye(4), LTI.D )
+% stepplot(sys2)
+
 
 
