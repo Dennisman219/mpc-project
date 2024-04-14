@@ -39,7 +39,7 @@ x_ref= [0;0;0;-2];
 dim.nx = 4;
 dim.ny = 4;
 dim.nu = 2;
-dim.N =3;
+dim.N =10;
 time = 15
 
 
