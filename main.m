@@ -41,6 +41,8 @@ dim.ny = 4;
 dim.nu = 2;
 dim.N =10;
 time = 15
+x1_values = zeros(dim.nx, time);
+c1_values = zeros(dim.nu, time);
 
 
 % weighting matrices
@@ -53,7 +55,7 @@ Q =   [1 0 0 0;
 R = 0.1 * eye(2);
 
 
-% ricatti solutions
+% discrete ricatti optimal solutions
 [X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[]);
 
 
@@ -80,14 +82,14 @@ Objective = x_bar' * Q_bar * x_bar + u' * R_tilde * u
 optimize(Constraint,Objective)     
 uopt_1=value(u)     
 x1=LTI.A*x0+LTI.B*uopt_1(1:dim.nu);
-
 x1_values(:, 1) = C*x1;
-c1_values = zeros(dim.nu, time);
+c1_values(:, 1) = uopt_1(1:dim.nu);
 
 
 % state constraints
 State_constraints_plus = kron(ones(dim.N + 1, 1),[100; 100; 50; 10]);
 State_constraints_min = -1*State_constraints_plus;
+
 
 % Finding the terminal set
 system = LTISystem('A', LTI.A, 'B', LTI.B);
@@ -95,12 +97,11 @@ system.x.min = [-100; -100; -50; -10];
 system.x.max = [100; 100; 50; 10];
 system.u.min = [-25, -25];
 system.u.max = [25, 25];
-
 system.x.penalty = QuadFunction( Q );
 system.u.penalty = QuadFunction( R );
-
 Pen = system.LQRPenalty;
 Tset = system.LQRSet;
+
 
 % Expanding the matrices to form inequality constraints that the solver can
 % take
@@ -111,9 +112,6 @@ B_t_bar = kron(ones(dim.N+1, 1), B_t)
 
 % solver settings
 ops = sdpsettings('verbose',0, 'debug',0, 'showprogress', 0)
-
-x1_values = zeros(dim.nx, time);
-c1_values = zeros(dim.nu, time);
 
 for i = 2:time  
     min_lim_ = State_constraints_min - (P*(x1)); 
