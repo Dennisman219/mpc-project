@@ -38,7 +38,7 @@ R = 0.7*eye(2)
 
 [X, K, L, info] = idare(LTI.A,LTI.B,Q,R,[],[])
 
-[P, S] = predmodgen(LTI, dim)
+[P, S] = predmodgen_2(LTI, dim)
 [H,h,const] = costgen(P, S, Q, R, dim, (x0))
 
 x1 = x0;
